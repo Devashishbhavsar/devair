@@ -39,3 +39,21 @@ export function normalizeIata(code: string): string {
 export function isKnownAirport(code: string): boolean {
   return normalizeIata(code) in AIRPORTS;
 }
+
+export type AirportCatalogEntry = {
+  code: string;
+  city: string;
+  name: string;
+  label: string;
+};
+
+export function getAirportCatalog(): AirportCatalogEntry[] {
+  return Object.entries(AIRPORTS)
+    .map(([code, airport]) => ({
+      code,
+      city: airport.city,
+      name: airport.name,
+      label: `${airport.city} (${code}) - ${airport.name}`,
+    }))
+    .sort((a, b) => a.city.localeCompare(b.city) || a.code.localeCompare(b.code));
+}

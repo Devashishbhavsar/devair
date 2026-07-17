@@ -1,4 +1,11 @@
-import { AIRPORTS, IATA_REGEX, isKnownAirport, normalizeIata } from "./airports";
+import {
+  AIRPORTS,
+  IATA_REGEX,
+  getAirportCatalog,
+  isKnownAirport,
+  normalizeIata,
+  type AirportCatalogEntry,
+} from "./airports";
 
 export type SearchInput = {
   from: string;
@@ -42,6 +49,7 @@ const AIRLINES = [
 ] as const;
 
 export const SEARCH_AIRLINES = AIRLINES.map((airline) => airline.name);
+export type AirlineCatalogEntry = (typeof AIRLINES)[number];
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -198,6 +206,41 @@ export function searchFlightOffers(input: {
   return offers
     .filter((offer) => !input.airline || offer.airline === input.airline)
     .sort((a, b) => a.totalPrice - b.totalPrice);
+}
+
+export function getAirlineCatalog(): AirlineCatalogEntry[] {
+  return [...AIRLINES];
+}
+
+export function getSearchCatalog(input?: { q?: string; limit?: number }): {
+  airlines: AirlineCatalogEntry[];
+  airports: AirportCatalogEntry[];
+} {
+  const query = input?.q?.trim().toLowerCase() ?? "";
+  const limit = Math.max(1, Math.min(input?.limit ?? 10, 50));
+  const airports = getAirportCatalog()
+    .filter((airport) => {
+      if (!query) return true;
+      return (
+        airport.code.toLowerCase().includes(query) ||
+        airport.city.toLowerCase().includes(query) ||
+        airport.name.toLowerCase().includes(query) ||
+        airport.label.toLowerCase().includes(query)
+      );
+    })
+    .slice(0, limit);
+
+  const airlines = getAirlineCatalog().filter((airline) => {
+    if (!query) return true;
+    return (
+      airline.code.toLowerCase().includes(query) || airline.name.toLowerCase().includes(query)
+    );
+  });
+
+  return {
+    airlines,
+    airports,
+  };
 }
 
 export function airportLabel(code: string): string {
