@@ -9,8 +9,19 @@ import {
 } from "@/lib/search";
 
 type Status = "idle" | "loading" | "results" | "empty" | "error";
+type HoldStatus = "idle" | "loading" | "success" | "error";
 type FieldName = "from" | "to" | "date" | "passengers" | "airline";
 type FieldErrors = Partial<Record<FieldName, string>>;
+type HoldValidity = "48h" | "14d";
+type ReservationSummary = {
+  pnr: string;
+  airlineRef: string;
+  status: "hold" | "paid" | "expired";
+  validity: HoldValidity;
+  holdExpiresAt: string;
+  verificationUrl: string | null;
+  pdfUrl: string;
+};
 
 function todayIsoDate(): string {
   const now = new Date();
@@ -46,12 +57,21 @@ export function SearchForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [offers, setOffers] = useState<FlightOffer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [holdValidity, setHoldValidity] = useState<HoldValidity>("48h");
+  const [travelerName, setTravelerName] = useState("");
+  const [travelerEmail, setTravelerEmail] = useState("");
+  const [holdStatus, setHoldStatus] = useState<HoldStatus>("idle");
+  const [holdMessage, setHoldMessage] = useState<string | null>(null);
+  const [reservation, setReservation] = useState<ReservationSummary | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
+    setHoldMessage(null);
     setOffers([]);
     setSelectedId(null);
+    setReservation(null);
+    setHoldStatus("idle");
 
     const validated = validateSearchInput({
       from,
@@ -116,6 +136,51 @@ export function SearchForm() {
 
   const selected = offers.find((offer) => offer.id === selectedId) ?? null;
   const activeAirline = airline.trim();
+
+  async function handleCreateHold() {
+    if (!selected) {
+      setHoldStatus("error");
+      setHoldMessage("Select a flight offer before creating a hold.");
+      return;
+    }
+
+    setHoldStatus("loading");
+    setHoldMessage(null);
+    setReservation(null);
+
+    try {
+      const response = await fetch("/api/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from,
+          to,
+          date,
+          passengers,
+          airline,
+          tripType: "one-way",
+          offerId: selected.id,
+          validity: holdValidity,
+          travelerName,
+          travelerEmail,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setHoldStatus("error");
+        setHoldMessage(data.error ?? "Could not create a reservation hold.");
+        return;
+      }
+
+      setReservation(data.reservation as ReservationSummary);
+      setHoldStatus("success");
+      setHoldMessage(null);
+    } catch {
+      setHoldStatus("error");
+      setHoldMessage("Could not reach the reservation service. Please try again.");
+    }
+  }
 
   function fieldClassName(field: FieldName): string {
     return `h-11 rounded-md border px-3 text-base outline-none dark:bg-zinc-900 ${
@@ -291,7 +356,12 @@ export function SearchForm() {
                 <li key={offer.id}>
                   <button
                     type="button"
-                    onClick={() => setSelectedId(offer.id)}
+                    onClick={() => {
+                      setSelectedId(offer.id);
+                      setReservation(null);
+                      setHoldStatus("idle");
+                      setHoldMessage(null);
+                    }}
                     aria-pressed={isSelected}
                     className={`flex w-full flex-col gap-2 rounded-md border px-4 py-3 text-left transition-colors ${
                       isSelected
@@ -321,11 +391,104 @@ export function SearchForm() {
           </ul>
 
           {selected && (
-            <p role="status" className="text-sm text-zinc-700 dark:text-zinc-300">
-              Selected {selected.airline} ({selected.flightNumber}) for{" "}
-              {formatMoney(selected.totalPrice, selected.currency)}. Hold/checkout comes in a later
-              story.
-            </p>
+            <div className="flex flex-col gap-4 rounded-md border border-zinc-300 p-4 dark:border-zinc-700">
+              <div className="flex flex-col gap-1">
+                <p role="status" className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  Selected {selected.airline} ({selected.flightNumber}) for{" "}
+                  {formatMoney(selected.totalPrice, selected.currency)}
+                </p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Create a verifiable hold with PNR, airline reference, validity, and PDF.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="holdValidity" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Hold validity
+                  </label>
+                  <select
+                    id="holdValidity"
+                    value={holdValidity}
+                    onChange={(event) => setHoldValidity(event.target.value as HoldValidity)}
+                    className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+                  >
+                    <option value="48h">48 hours</option>
+                    <option value="14d">14 days</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="travelerName" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Traveler name
+                  </label>
+                  <input
+                    id="travelerName"
+                    type="text"
+                    value={travelerName}
+                    onChange={(event) => setTravelerName(event.target.value)}
+                    className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+                  />
+                </div>
+                <div className="flex flex-col gap-2 sm:col-span-2">
+                  <label htmlFor="travelerEmail" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Traveler email
+                  </label>
+                  <input
+                    id="travelerEmail"
+                    type="email"
+                    value={travelerEmail}
+                    onChange={(event) => setTravelerEmail(event.target.value)}
+                    className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCreateHold}
+                disabled={holdStatus === "loading"}
+                className="h-11 rounded-full bg-foreground px-5 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
+              >
+                {holdStatus === "loading" ? "Creating hold..." : "Create hold"}
+              </button>
+
+              {holdMessage && (
+                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                  {holdMessage}
+                </p>
+              )}
+
+              {reservation && (
+                <div className="grid gap-2 rounded-md bg-zinc-100 p-4 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>PNR</span>
+                    <strong>{reservation.pnr}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>Airline reference</span>
+                    <strong>{reservation.airlineRef}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>Status</span>
+                    <strong>{reservation.status.toUpperCase()}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>Valid until</span>
+                    <strong>{new Date(reservation.holdExpiresAt).toLocaleString()}</strong>
+                  </div>
+                  <div className="flex flex-wrap gap-4 pt-2">
+                    <a className="underline underline-offset-4" href={reservation.pdfUrl} target="_blank">
+                      Open PDF
+                    </a>
+                    {reservation.verificationUrl && (
+                      <a className="underline underline-offset-4" href={reservation.verificationUrl} target="_blank">
+                        Verify hold
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </section>
       )}
