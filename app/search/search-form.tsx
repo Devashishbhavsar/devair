@@ -16,8 +16,11 @@ type HoldValidity = "48h" | "14d";
 type ReservationSummary = {
   pnr: string;
   airlineRef: string;
+  documentNumber: string;
+  verificationCode: string;
   status: "hold" | "paid" | "expired";
   validity: HoldValidity;
+  validityLabel: string;
   holdExpiresAt: string;
   verificationUrl: string | null;
   pdfUrl: string;
@@ -469,8 +472,20 @@ export function SearchForm() {
                     <strong>{reservation.airlineRef}</strong>
                   </div>
                   <div className="flex flex-wrap justify-between gap-2">
+                    <span>Document</span>
+                    <strong>{reservation.documentNumber}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>Verification code</span>
+                    <strong>{reservation.verificationCode}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span>Status</span>
                     <strong>{reservation.status.toUpperCase()}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>Hold validity</span>
+                    <strong>{reservation.validityLabel}</strong>
                   </div>
                   <div className="flex flex-wrap justify-between gap-2">
                     <span>Valid until</span>

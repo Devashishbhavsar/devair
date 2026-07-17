@@ -1,7 +1,4 @@
-import { randomBytes } from "crypto";
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import path from "path";
+import { createHash, randomBytes } from "crypto";
 import { airportLabel, searchFlightOffers, validateSearchInput, type FlightOffer } from "./search";
 
 export const HOLD_VALIDITY_OPTIONS = ["48h", "14d"] as const;
@@ -13,6 +10,8 @@ export type Reservation = {
   id: string;
   pnr: string;
   airlineRef: string;
+  documentNumber: string;
+  verificationCode: string;
   status: ReservationStatus;
   statusReason: string;
   validity: HoldValidity;
@@ -61,11 +60,20 @@ type ReservationStore = {
   reservations: Reservation[];
 };
 
-const STORE_DIR = process.env.DEVAIR_RESERVATION_STORE_DIR ?? path.join(tmpdir(), "devair");
-const STORE_FILE = path.join(STORE_DIR, "reservations.json");
+const RESERVATION_STORE_KEY = Symbol.for("devair.reservationStore");
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PNR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PNR_REGEX = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+
+type GlobalReservationStore = typeof globalThis & {
+  [RESERVATION_STORE_KEY]?: ReservationStore;
+};
+
+function reservationStore(): ReservationStore {
+  const globalStore = globalThis as GlobalReservationStore;
+  globalStore[RESERVATION_STORE_KEY] ??= { reservations: [] };
+  return globalStore[RESERVATION_STORE_KEY];
+}
 
 function validityLabel(validity: HoldValidity): string {
   return validity === "48h" ? "48 hours" : "14 days";
@@ -90,6 +98,33 @@ function randomCode(length: number): string {
   return code;
 }
 
+function documentNumber(pnr: string): string {
+  return `DA-HOLD-${pnr}`;
+}
+
+function verificationPayload(reservation: Pick<
+  Reservation,
+  "pnr" | "airlineRef" | "holdCreatedAt" | "holdExpiresAt" | "offer"
+>): string {
+  return [
+    reservation.pnr,
+    reservation.airlineRef,
+    reservation.holdCreatedAt,
+    reservation.holdExpiresAt,
+    reservation.offer.flightNumber,
+    reservation.offer.from,
+    reservation.offer.to,
+    reservation.offer.date,
+  ].join("|");
+}
+
+function verificationCode(reservation: Pick<
+  Reservation,
+  "pnr" | "airlineRef" | "holdCreatedAt" | "holdExpiresAt" | "offer"
+>): string {
+  return createHash("sha256").update(verificationPayload(reservation)).digest("hex").slice(0, 16).toUpperCase();
+}
+
 function currentStatus(reservation: Reservation, at = new Date()): ReservationStatus {
   if (reservation.status === "paid") return "paid";
   return new Date(reservation.holdExpiresAt) <= at ? "expired" : "hold";
@@ -104,8 +139,13 @@ function statusReason(status: ReservationStatus): string {
 function withCurrentStatus(reservation: Reservation): Reservation {
   const status = currentStatus(reservation);
   const validity = validateHoldValidity(reservation.validity) ?? "48h";
-  return {
+  const normalized = {
     ...reservation,
+    documentNumber: reservation.documentNumber ?? documentNumber(reservation.pnr),
+    verificationCode: reservation.verificationCode ?? verificationCode(reservation),
+  };
+  return {
+    ...normalized,
     status,
     statusReason: statusReason(status),
     validityLabel: reservation.validityLabel ?? validityLabel(validity),
@@ -133,24 +173,11 @@ function buildPublicUrls(pnr: string, origin: string | null): Pick<Reservation, 
 }
 
 async function readStore(): Promise<ReservationStore> {
-  try {
-    const raw = await readFile(STORE_FILE, "utf8");
-    const parsed = JSON.parse(raw) as Partial<ReservationStore>;
-    return {
-      reservations: Array.isArray(parsed.reservations) ? parsed.reservations : [],
-    };
-  } catch (error) {
-    const code = typeof error === "object" && error && "code" in error ? error.code : null;
-    if (code === "ENOENT") return { reservations: [] };
-    throw error;
-  }
+  return reservationStore();
 }
 
 async function writeStore(store: ReservationStore): Promise<void> {
-  await mkdir(STORE_DIR, { recursive: true });
-  const tmpFile = `${STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmpFile, `${JSON.stringify(store, null, 2)}\n`, "utf8");
-  await rename(tmpFile, STORE_FILE);
+  reservationStore().reservations = store.reservations;
 }
 
 function validateHoldValidity(raw: unknown): HoldValidity | null {
@@ -260,6 +287,8 @@ export async function createHoldReservation(raw: CreateReservationInput): Promis
     id: `res_${pnr.toLowerCase()}`,
     pnr,
     airlineRef,
+    documentNumber: documentNumber(pnr),
+    verificationCode: "",
     status: "hold",
     statusReason: statusReason("hold"),
     validity,
@@ -273,6 +302,7 @@ export async function createHoldReservation(raw: CreateReservationInput): Promis
     pdfUrl: publicUrls.pdfUrl,
     offer,
   };
+  reservation.verificationCode = verificationCode(reservation);
 
   store.reservations.unshift(reservation);
   await writeStore(store);
@@ -291,44 +321,122 @@ function escapePdfText(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function pdfLine(y: number, value: string, size = 11): string {
-  return `BT /F1 ${size} Tf 54 ${y} Td (${escapePdfText(value)}) Tj ET`;
+function pdfLine(x: number, y: number, value: string, size = 11, font = "F1"): string {
+  return `BT /${font} ${size} Tf ${x} ${y} Td (${escapePdfText(value)}) Tj ET`;
+}
+
+function pdfRule(y: number): string {
+  return `54 ${y} m 558 ${y} l S`;
+}
+
+function pdfBox(x: number, y: number, width: number, height: number): string {
+  return `${x} ${y} ${width} ${height} re S`;
+}
+
+function pdfWrappedLines(x: number, y: number, value: string, options?: { size?: number; width?: number }): {
+  commands: string[];
+  nextY: number;
+} {
+  const size = options?.size ?? 10;
+  const width = options?.width ?? 86;
+  const words = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .flatMap((word) => {
+      if (word.length <= width) return [word];
+      const chunks: string[] = [];
+      for (let index = 0; index < word.length; index += width) {
+        chunks.push(word.slice(index, index + width));
+      }
+      return chunks;
+    });
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > width && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) lines.push(current);
+
+  return {
+    commands: lines.map((line, index) => pdfLine(x, y - index * (size + 4), line, size)),
+    nextY: y - lines.length * (size + 4),
+  };
 }
 
 export function buildReservationPdf(reservation: Reservation): Uint8Array {
   const offer = reservation.offer;
   const issuedAt = new Date(reservation.issuedAt).toUTCString();
+  const createdAt = new Date(reservation.holdCreatedAt).toUTCString();
   const expiresAt = new Date(reservation.holdExpiresAt).toUTCString();
-  const lines = [
-    pdfLine(760, "DevAir Reservation Hold Confirmation", 18),
-    pdfLine(732, `Document ID: ${reservation.id}`),
-    pdfLine(714, `Issued at: ${issuedAt}`),
-    pdfLine(690, `PNR: ${reservation.pnr}`, 14),
-    pdfLine(672, `Airline reference: ${reservation.airlineRef}`),
-    pdfLine(654, `Status: ${reservation.status.toUpperCase()} - ${reservation.statusReason}`),
-    pdfLine(636, `Hold validity: ${reservation.validityLabel} (${reservation.validity})`),
-    pdfLine(618, `Valid until: ${expiresAt}`),
-    pdfLine(588, `Traveler: ${reservation.travelerName ?? "Name not provided"}`),
-    pdfLine(570, `Traveler email: ${reservation.travelerEmail ?? "Email not provided"}`),
-    pdfLine(540, `Airline: ${offer.airline}`),
-    pdfLine(522, `Flight: ${offer.flightNumber}`),
-    pdfLine(504, `Route: ${airportLabel(offer.from)} to ${airportLabel(offer.to)}`),
-    pdfLine(486, `Travel date: ${offer.date}`),
-    pdfLine(468, `Departure: ${offer.departTime}    Arrival: ${offer.arriveTime}`),
-    pdfLine(450, `Passengers: ${offer.passengers}`),
-    pdfLine(432, `Fare held: ${offer.currency} ${offer.totalPrice}`),
-    pdfLine(396, "Verification"),
-    pdfLine(378, `Verify online: ${reservation.verificationUrl ?? "Use DevAir reservation lookup."}`),
-    pdfLine(348, "This visa-ready document confirms a temporary flight reservation hold."),
-    pdfLine(330, "It is not a paid ticket and remains valid only until payment or expiry."),
+  const content: string[] = [
+    "1.2 w",
+    pdfBox(42, 42, 528, 708),
+    pdfLine(54, 724, "DEVAIR", 12, "F2"),
+    pdfLine(54, 700, "Visa Reservation Hold / Embassy Itinerary", 18, "F2"),
+    pdfLine(54, 678, "Temporary flight reservation document for visa submission.", 10),
+    pdfLine(390, 724, `Document: ${reservation.documentNumber}`, 10, "F2"),
+    pdfLine(390, 706, `Issued: ${issuedAt}`, 9),
+    pdfRule(664),
+    pdfLine(54, 640, "Reservation identifiers", 12, "F2"),
+    pdfLine(72, 616, `PNR: ${reservation.pnr}`, 13, "F2"),
+    pdfLine(306, 616, `Airline booking reference: ${reservation.airlineRef}`, 11, "F2"),
+    pdfLine(72, 596, `Verification code: ${reservation.verificationCode}`, 10),
+    pdfLine(306, 596, `Status: ${reservation.status.toUpperCase()}`, 10, "F2"),
+    pdfLine(72, 576, `Status detail: ${reservation.statusReason}`, 10),
+    pdfLine(306, 576, "Ticketing: Not paid / not ticketed", 10),
+    pdfRule(556),
+    pdfLine(54, 532, "Hold validity", 12, "F2"),
+    pdfLine(72, 508, `Validity option: ${reservation.validityLabel} (${reservation.validity})`, 10),
+    pdfLine(72, 490, `Hold created: ${createdAt}`, 10),
+    pdfLine(72, 472, `Hold valid until: ${expiresAt}`, 10, "F2"),
+    pdfLine(72, 454, "Status remains HOLD until payment is received or the validity window expires.", 10),
+    pdfRule(434),
+    pdfLine(54, 410, "Traveler", 12, "F2"),
+    pdfLine(72, 386, `Name: ${reservation.travelerName ?? "Name not provided"}`, 10),
+    pdfLine(72, 368, `Email: ${reservation.travelerEmail ?? "Email not provided"}`, 10),
+    pdfRule(348),
+    pdfLine(54, 324, "Flight itinerary", 12, "F2"),
+    pdfLine(72, 300, `Airline: ${offer.airline}`, 10),
+    pdfLine(306, 300, `Flight: ${offer.flightNumber}`, 10),
+    pdfLine(72, 282, `Route: ${airportLabel(offer.from)} to ${airportLabel(offer.to)}`, 10),
+    pdfLine(72, 264, `Travel date: ${offer.date}`, 10),
+    pdfLine(306, 264, `Passengers: ${offer.passengers}`, 10),
+    pdfLine(72, 246, `Departure: ${offer.departTime}`, 10),
+    pdfLine(306, 246, `Arrival: ${offer.arriveTime}`, 10),
+    pdfLine(72, 228, "Cabin / booking basis: Economy hold", 10),
+    pdfLine(306, 228, `Fare held: ${offer.currency} ${offer.totalPrice}`, 10),
+    pdfRule(208),
+    pdfLine(54, 184, "Verification", 12, "F2"),
   ];
-  const content = lines.join("\n");
+  const verification = pdfWrappedLines(
+    72,
+    160,
+    `Verify this hold online at ${reservation.verificationUrl ?? "the DevAir reservation lookup"} using PNR ${reservation.pnr} and code ${reservation.verificationCode}.`,
+    { size: 10, width: 82 },
+  );
+  const disclaimer = pdfWrappedLines(
+    72,
+    verification.nextY - 12,
+    "Embassy note: this document confirms a temporary flight reservation hold with verifiable identifiers. It is formatted for visa documentation and embassy review, but it is not a paid ticket and does not guarantee carriage until the hold is paid and confirmed by the airline.",
+    { size: 9, width: 92 },
+  );
+  content.push(...verification.commands, ...disclaimer.commands);
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    `<< /Length ${Buffer.byteLength(content.join("\n"), "utf8")} >>\nstream\n${content.join("\n")}\nendstream`,
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
