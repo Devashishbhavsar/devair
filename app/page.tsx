@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SignInForm } from "./sign-in-form";
 
 export default async function Home({
@@ -26,6 +27,13 @@ export default async function Home({
         )}
 
         <SignInForm />
+
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Looking for flights?{" "}
+          <Link href="/search" className="font-medium underline underline-offset-4">
+            Search one-way offers
+          </Link>
+        </p>
       </main>
     </div>
   );

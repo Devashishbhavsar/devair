@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readSessionEmail, SESSION_COOKIE_NAME } from "@/lib/session";
 import { LogoutButton } from "./logout-button";
@@ -20,6 +21,12 @@ export default async function AccountPage() {
         <p className="text-lg text-zinc-600 dark:text-zinc-400">
           Signed in as <span className="font-medium text-black dark:text-zinc-50">{email}</span>
         </p>
+        <Link
+          href="/search"
+          className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-5 font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+        >
+          Search flights
+        </Link>
         <LogoutButton />
       </main>
     </div>
