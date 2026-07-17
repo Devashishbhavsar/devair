@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     to?: unknown;
     date?: unknown;
     passengers?: unknown;
+    airline?: unknown;
     tripType?: unknown;
   };
 
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
       typeof raw.passengers === "number" || typeof raw.passengers === "string"
         ? (raw.passengers as number | string)
         : NaN,
+    airline: typeof raw.airline === "string" ? raw.airline : "",
     tripType: typeof raw.tripType === "string" ? raw.tripType : "one-way",
   });
 

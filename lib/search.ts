@@ -5,6 +5,7 @@ export type SearchInput = {
   to: string;
   date: string;
   passengers: number | string;
+  airline?: string;
   tripType?: string;
 };
 
@@ -26,7 +27,7 @@ export type FlightOffer = {
 };
 
 export type SearchValidationError = {
-  field?: "from" | "to" | "date" | "passengers" | "tripType";
+  field?: "from" | "to" | "date" | "passengers" | "airline" | "tripType";
   message: string;
 };
 
@@ -39,6 +40,8 @@ const AIRLINES = [
   { code: "EK", name: "Emirates" },
   { code: "QR", name: "Qatar Airways" },
 ] as const;
+
+export const SEARCH_AIRLINES = AIRLINES.map((airline) => airline.name);
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -73,6 +76,7 @@ export function validateSearchInput(raw: Partial<SearchInput>): {
     to: string;
     date: string;
     passengers: number;
+    airline: string | null;
     tripType: "one-way";
   };
 } | {
@@ -90,6 +94,8 @@ export function validateSearchInput(raw: Partial<SearchInput>): {
       : typeof passengersRaw === "string"
         ? Number(passengersRaw)
         : NaN;
+  const airlineRaw = typeof raw.airline === "string" ? raw.airline.trim() : "";
+  const airline = airlineRaw.length > 0 ? airlineRaw : null;
   const tripType =
     typeof raw.tripType === "string" && raw.tripType.trim()
       ? raw.tripType.trim().toLowerCase()
@@ -120,6 +126,10 @@ export function validateSearchInput(raw: Partial<SearchInput>): {
     errors.push({ field: "passengers", message: "Passengers must be a whole number from 1 to 9." });
   }
 
+  if (airline && !AIRLINES.some((candidate) => candidate.name === airline)) {
+    errors.push({ field: "airline", message: "Choose a valid airline." });
+  }
+
   if (tripType !== "one-way") {
     errors.push({ field: "tripType", message: "Only one-way search is supported in this release." });
   }
@@ -135,6 +145,7 @@ export function validateSearchInput(raw: Partial<SearchInput>): {
       to,
       date,
       passengers,
+      airline,
       tripType: "one-way",
     },
   };
@@ -145,6 +156,7 @@ export function searchFlightOffers(input: {
   to: string;
   date: string;
   passengers: number;
+  airline?: string | null;
 }): FlightOffer[] {
   const seed = hashSeed(`${input.from}-${input.to}-${input.date}-${input.passengers}`);
   // Deterministic empty result for a known edge-case route (error/empty AC).
@@ -183,7 +195,9 @@ export function searchFlightOffers(input: {
     });
   }
 
-  return offers.sort((a, b) => a.totalPrice - b.totalPrice);
+  return offers
+    .filter((offer) => !input.airline || offer.airline === input.airline)
+    .sort((a, b) => a.totalPrice - b.totalPrice);
 }
 
 export function airportLabel(code: string): string {

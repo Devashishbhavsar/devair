@@ -1,9 +1,16 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { airportLabel, type FlightOffer } from "@/lib/search";
+import {
+  airportLabel,
+  SEARCH_AIRLINES,
+  type FlightOffer,
+  validateSearchInput,
+} from "@/lib/search";
 
 type Status = "idle" | "loading" | "results" | "empty" | "error";
+type FieldName = "from" | "to" | "date" | "passengers" | "airline";
+type FieldErrors = Partial<Record<FieldName, string>>;
 
 function todayIsoDate(): string {
   const now = new Date();
@@ -33,28 +40,50 @@ export function SearchForm() {
   const [to, setTo] = useState("LHR");
   const [date, setDate] = useState(defaultDate);
   const [passengers, setPassengers] = useState(1);
+  const [airline, setAirline] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [offers, setOffers] = useState<FlightOffer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatus("loading");
     setMessage(null);
     setOffers([]);
     setSelectedId(null);
+
+    const validated = validateSearchInput({
+      from,
+      to,
+      date,
+      passengers,
+      airline,
+      tripType: "one-way",
+    });
+
+    if (!validated.ok) {
+      const nextFieldErrors: FieldErrors = {};
+      for (const error of validated.errors) {
+        if (error.field && !nextFieldErrors[error.field as FieldName]) {
+          nextFieldErrors[error.field as FieldName] = error.message;
+        }
+      }
+      setFieldErrors(nextFieldErrors);
+      setStatus("error");
+      setMessage(validated.errors[0]?.message ?? "Check your search details and try again.");
+      return;
+    }
+
+    setFieldErrors({});
+    setStatus("loading");
 
     try {
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from,
-          to,
-          date,
-          passengers,
-          tripType: "one-way",
+          ...validated.value,
         }),
       });
       const data = await response.json();
@@ -69,7 +98,11 @@ export function SearchForm() {
       setOffers(nextOffers);
       if (nextOffers.length === 0) {
         setStatus("empty");
-        setMessage("No flights found for that route and date. Try different airports or another day.");
+        setMessage(
+          validated.value.airline
+            ? `No ${validated.value.airline} flights found for that route and date. Try another airline or day.`
+            : "No flights found for that route and date. Try different airports or another day.",
+        );
         return;
       }
 
@@ -82,6 +115,15 @@ export function SearchForm() {
   }
 
   const selected = offers.find((offer) => offer.id === selectedId) ?? null;
+  const activeAirline = airline.trim();
+
+  function fieldClassName(field: FieldName): string {
+    return `h-11 rounded-md border px-3 text-base outline-none dark:bg-zinc-900 ${
+      fieldErrors[field]
+        ? "border-red-500 focus:border-red-600 dark:border-red-500 dark:focus:border-red-400"
+        : "border-zinc-300 focus:border-zinc-950 dark:border-zinc-700 dark:focus:border-zinc-50"
+    }`;
+  }
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-8">
@@ -101,8 +143,15 @@ export function SearchForm() {
               placeholder="JFK"
               value={from}
               onChange={(event) => setFrom(event.target.value.toUpperCase())}
-              className="h-11 rounded-md border border-zinc-300 px-3 text-base uppercase outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+              aria-invalid={fieldErrors.from ? true : undefined}
+              aria-describedby={fieldErrors.from ? "from-error" : undefined}
+              className={`${fieldClassName("from")} uppercase`}
             />
+            {fieldErrors.from && (
+              <p id="from-error" className="text-sm text-red-600 dark:text-red-400">
+                {fieldErrors.from}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 text-left">
             <label htmlFor="to" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -118,8 +167,15 @@ export function SearchForm() {
               placeholder="LHR"
               value={to}
               onChange={(event) => setTo(event.target.value.toUpperCase())}
-              className="h-11 rounded-md border border-zinc-300 px-3 text-base uppercase outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+              aria-invalid={fieldErrors.to ? true : undefined}
+              aria-describedby={fieldErrors.to ? "to-error" : undefined}
+              className={`${fieldClassName("to")} uppercase`}
             />
+            {fieldErrors.to && (
+              <p id="to-error" className="text-sm text-red-600 dark:text-red-400">
+                {fieldErrors.to}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 text-left">
             <label htmlFor="date" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -133,8 +189,15 @@ export function SearchForm() {
               min={defaultDate}
               value={date}
               onChange={(event) => setDate(event.target.value)}
-              className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+              aria-invalid={fieldErrors.date ? true : undefined}
+              aria-describedby={fieldErrors.date ? "date-error" : undefined}
+              className={fieldClassName("date")}
             />
+            {fieldErrors.date && (
+              <p id="date-error" className="text-sm text-red-600 dark:text-red-400">
+                {fieldErrors.date}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 text-left">
             <label htmlFor="passengers" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -149,8 +212,41 @@ export function SearchForm() {
               required
               value={passengers}
               onChange={(event) => setPassengers(Number(event.target.value))}
-              className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+              aria-invalid={fieldErrors.passengers ? true : undefined}
+              aria-describedby={fieldErrors.passengers ? "passengers-error" : undefined}
+              className={fieldClassName("passengers")}
             />
+            {fieldErrors.passengers && (
+              <p id="passengers-error" className="text-sm text-red-600 dark:text-red-400">
+                {fieldErrors.passengers}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 text-left sm:col-span-2">
+            <label htmlFor="airline" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Airline
+            </label>
+            <select
+              id="airline"
+              name="airline"
+              value={airline}
+              onChange={(event) => setAirline(event.target.value)}
+              aria-invalid={fieldErrors.airline ? true : undefined}
+              aria-describedby={fieldErrors.airline ? "airline-error" : undefined}
+              className={fieldClassName("airline")}
+            >
+              <option value="">Any airline</option>
+              {SEARCH_AIRLINES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.airline && (
+              <p id="airline-error" className="text-sm text-red-600 dark:text-red-400">
+                {fieldErrors.airline}
+              </p>
+            )}
           </div>
         </div>
 
@@ -185,6 +281,9 @@ export function SearchForm() {
             {offers.length} offer{offers.length === 1 ? "" : "s"} · {airportLabel(from)} →{" "}
             {airportLabel(to)}
           </h2>
+          {activeAirline && (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">Filtered to {activeAirline}</p>
+          )}
           <ul className="flex flex-col gap-3">
             {offers.map((offer) => {
               const isSelected = offer.id === selectedId;
