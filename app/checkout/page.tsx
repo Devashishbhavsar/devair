@@ -1,10 +1,19 @@
+// app/checkout/page.tsx
 import React from 'react';
+import { BookingStatusView } from './components/BookingStatusView';
+import { ResendEmail } from './components/ResendEmail';
+import { DownloadInvoice } from './components/DownloadInvoice';
+import { CancelRequest } from './components/CancelRequest';
+import { ExtendValidity } from './components/ExtendValidity';
 
-const CheckoutPage = () => {
+const CheckoutPage: React.FC = () => {
   return (
     <div>
-      <h1>Checkout Page</h1>
-      {/* Booking status view, resend email, download invoice, request cancel, extend validity components go here */}
+      <BookingStatusView />
+      <ResendEmail />
+      <DownloadInvoice />
+      <CancelRequest />
+      <ExtendValidity />
     </div>
   );
 };
