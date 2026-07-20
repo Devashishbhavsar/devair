@@ -1,20 +1,16 @@
-// Import necessary libraries and components
+// app/checkout/page.tsx
 import React from 'react';
-import { BookingStatusView } from './components/BookingStatusView';
-import { ResendEmailButton } from './components/ResendEmailButton';
-import { DownloadInvoiceButton } from './components/DownloadInvoiceButton';
-import { CancelRequestButton } from './components/CancelRequestButton';
-import { ExtendValidityButton } from './components/ExtendValidityButton';
+import { Status, resendEmail, downloadInvoice, requestCancel, extendValidity } from '../services/omService';
 
-// Define the main component for the checkout page
 const CheckoutPage: React.FC = () => {
   return (
-    <div className="checkout-page">
-      <BookingStatusView />
-      <ResendEmailButton />
-      <DownloadInvoiceButton />
-      <CancelRequestButton />
-      <ExtendValidityButton />
+    <div>
+      <h1>Booking Status</h1>
+      <Status />
+      <button onClick={resendEmail}>Resend Email</button>
+      <button onClick={downloadInvoice}>Download Invoice</button>
+      <button onClick={requestCancel}>Request Cancel</button>
+      <button onClick={extendValidity}>Extend Validity</button>
     </div>
   );
 };
