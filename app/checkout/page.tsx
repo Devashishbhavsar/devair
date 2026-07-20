@@ -1,20 +1,18 @@
-// Import necessary modules and components
+// Import necessary components and hooks
 import React from 'react';
-import { BookingStatusView } from './components/BookingStatusView';
-import { ResendEmail } from './components/ResendEmail';
-import { DownloadInvoice } from './components/DownloadInvoice';
-import { CancelRequest } from './components/CancelRequest';
-import { ExtendValidity } from './components/ExtendValidity';
+import { useBookingStatus } from './useBookingStatus';
+import { ResendEmailButton, DownloadInvoiceButton, CancelRequestButton, ExtendValidityButton } from './Buttons';
 
-// Main component for checkout page
 const CheckoutPage = () => {
+  const { status, handleResend, handleDownload, handleCancel, handleExtend } = useBookingStatus();
+
   return (
     <div>
-      <BookingStatusView />
-      <ResendEmail />
-      <DownloadInvoice />
-      <CancelRequest />
-      <ExtendValidity />
+      <h1>Booking Status: {status}</h1>
+      <ResendEmailButton onClick={handleResend} disabled={!canSendEmail} />
+      <DownloadInvoiceButton onClick={handleDownload} disabled={!invoiceAvailable} />
+      <CancelRequestButton onClick={handleCancel} disabled={!cancelable} />
+      <ExtendValidityButton onClick={handleExtend} disabled={!extendable} />
     </div>
   );
 };
