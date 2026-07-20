@@ -21,7 +21,10 @@ type ReservationSummary = {
   status: "hold" | "paid" | "expired";
   validity: HoldValidity;
   validityLabel: string;
+  holdValidityHours: number;
   holdExpiresAt: string;
+  documentType: string;
+  ticketingStatus: "not_ticketed" | "ticketed";
   verificationUrl: string | null;
   pdfUrl: string;
 };
@@ -476,6 +479,10 @@ export function SearchForm() {
                     <strong>{reservation.documentNumber}</strong>
                   </div>
                   <div className="flex flex-wrap justify-between gap-2">
+                    <span>Document type</span>
+                    <strong>{reservation.documentType}</strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span>Verification code</span>
                     <strong>{reservation.verificationCode}</strong>
                   </div>
@@ -485,7 +492,13 @@ export function SearchForm() {
                   </div>
                   <div className="flex flex-wrap justify-between gap-2">
                     <span>Hold validity</span>
-                    <strong>{reservation.validityLabel}</strong>
+                    <strong>
+                      {reservation.validityLabel} ({reservation.holdValidityHours}h)
+                    </strong>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span>Ticketing</span>
+                    <strong>{reservation.ticketingStatus === "ticketed" ? "Ticketed" : "Not ticketed"}</strong>
                   </div>
                   <div className="flex flex-wrap justify-between gap-2">
                     <span>Valid until</span>

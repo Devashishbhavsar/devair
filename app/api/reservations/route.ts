@@ -17,6 +17,10 @@ type ReservationRequestShape = {
   travelerEmail?: unknown;
 };
 
+function isReservationRequestShape(body: unknown): body is ReservationRequestShape {
+  return typeof body === "object" && body !== null && !Array.isArray(body);
+}
+
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -25,10 +29,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
+  if (!isReservationRequestShape(body)) {
+    return NextResponse.json({ error: "Reservation request body must be a JSON object." }, { status: 400 });
+  }
+
   let result: Awaited<ReturnType<typeof createHoldReservation>>;
   try {
     result = await createHoldReservation({
-      ...((body ?? {}) as ReservationRequestShape),
+      ...body,
       origin: request.nextUrl.origin,
     });
   } catch {

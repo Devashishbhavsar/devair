@@ -2,6 +2,10 @@ import { createHash, randomBytes } from "crypto";
 import { airportLabel, searchFlightOffers, validateSearchInput, type FlightOffer } from "./search";
 
 export const HOLD_VALIDITY_OPTIONS = ["48h", "14d"] as const;
+const HOLD_VALIDITY_CONFIG = {
+  "48h": { label: "48 hours", durationHours: 48 },
+  "14d": { label: "14 days", durationHours: 14 * 24 },
+} as const satisfies Record<string, { label: string; durationHours: number }>;
 
 export type HoldValidity = (typeof HOLD_VALIDITY_OPTIONS)[number];
 export type ReservationStatus = "hold" | "paid" | "expired";
@@ -16,9 +20,12 @@ export type Reservation = {
   statusReason: string;
   validity: HoldValidity;
   validityLabel: string;
+  holdValidityHours: number;
   holdCreatedAt: string;
   holdExpiresAt: string;
   issuedAt: string;
+  documentType: string;
+  ticketingStatus: "not_ticketed" | "ticketed";
   travelerName: string | null;
   travelerEmail: string | null;
   verificationUrl: string | null;
@@ -76,16 +83,16 @@ function reservationStore(): ReservationStore {
 }
 
 function validityLabel(validity: HoldValidity): string {
-  return validity === "48h" ? "48 hours" : "14 days";
+  return HOLD_VALIDITY_CONFIG[validity].label;
+}
+
+function validityDurationHours(validity: HoldValidity): number {
+  return HOLD_VALIDITY_CONFIG[validity].durationHours;
 }
 
 function addValidity(createdAt: Date, validity: HoldValidity): Date {
   const expiresAt = new Date(createdAt);
-  if (validity === "48h") {
-    expiresAt.setHours(expiresAt.getHours() + 48);
-  } else {
-    expiresAt.setDate(expiresAt.getDate() + 14);
-  }
+  expiresAt.setHours(expiresAt.getHours() + validityDurationHours(validity));
   return expiresAt;
 }
 
@@ -149,7 +156,10 @@ function withCurrentStatus(reservation: Reservation): Reservation {
     status,
     statusReason: statusReason(status),
     validityLabel: reservation.validityLabel ?? validityLabel(validity),
+    holdValidityHours: reservation.holdValidityHours ?? validityDurationHours(validity),
     issuedAt: reservation.issuedAt ?? reservation.holdCreatedAt,
+    documentType: reservation.documentType ?? "Visa-ready reservation hold",
+    ticketingStatus: reservation.ticketingStatus ?? "not_ticketed",
   };
 }
 
@@ -293,9 +303,12 @@ export async function createHoldReservation(raw: CreateReservationInput): Promis
     statusReason: statusReason("hold"),
     validity,
     validityLabel: validityLabel(validity),
+    holdValidityHours: validityDurationHours(validity),
     holdCreatedAt: createdAt.toISOString(),
     holdExpiresAt: addValidity(createdAt, validity).toISOString(),
     issuedAt: createdAt.toISOString(),
+    documentType: "Visa-ready reservation hold",
+    ticketingStatus: "not_ticketed",
     travelerName: travelerName ?? null,
     travelerEmail: travelerEmail ?? null,
     verificationUrl: publicUrls.verificationUrl,
@@ -387,15 +400,16 @@ export function buildReservationPdf(reservation: Reservation): Uint8Array {
     pdfLine(390, 706, `Issued: ${issuedAt}`, 9),
     pdfRule(664),
     pdfLine(54, 640, "Reservation identifiers", 12, "F2"),
+    pdfLine(72, 626, `Document type: ${reservation.documentType}`, 10),
     pdfLine(72, 616, `PNR: ${reservation.pnr}`, 13, "F2"),
     pdfLine(306, 616, `Airline booking reference: ${reservation.airlineRef}`, 11, "F2"),
     pdfLine(72, 596, `Verification code: ${reservation.verificationCode}`, 10),
     pdfLine(306, 596, `Status: ${reservation.status.toUpperCase()}`, 10, "F2"),
     pdfLine(72, 576, `Status detail: ${reservation.statusReason}`, 10),
-    pdfLine(306, 576, "Ticketing: Not paid / not ticketed", 10),
+    pdfLine(306, 576, `Ticketing: ${reservation.ticketingStatus === "ticketed" ? "Ticketed" : "Not paid / not ticketed"}`, 10),
     pdfRule(556),
     pdfLine(54, 532, "Hold validity", 12, "F2"),
-    pdfLine(72, 508, `Validity option: ${reservation.validityLabel} (${reservation.validity})`, 10),
+    pdfLine(72, 508, `Validity option: ${reservation.validityLabel} (${reservation.validity}, ${reservation.holdValidityHours} hours)`, 10),
     pdfLine(72, 490, `Hold created: ${createdAt}`, 10),
     pdfLine(72, 472, `Hold valid until: ${expiresAt}`, 10, "F2"),
     pdfLine(72, 454, "Status remains HOLD until payment is received or the validity window expires.", 10),

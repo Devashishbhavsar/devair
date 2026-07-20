@@ -48,6 +48,52 @@ async function expectOk(response, label, expectedStatus) {
   }
 }
 
+function assertReservationContract(reservation, validity, search) {
+  if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(reservation.pnr ?? "")) {
+    throw new Error(`create ${validity} returned invalid PNR ${reservation.pnr}`);
+  }
+  if (!new RegExp(`^[A-Z0-9]{2}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$`).test(reservation.airlineRef ?? "")) {
+    throw new Error(`create ${validity} returned invalid airline reference ${reservation.airlineRef}`);
+  }
+  if (reservation.status !== "hold") {
+    throw new Error(`create ${validity} returned status ${reservation.status}; expected hold`);
+  }
+  if (reservation.ticketingStatus !== "not_ticketed") {
+    throw new Error(`create ${validity} returned ticketingStatus ${reservation.ticketingStatus}`);
+  }
+  if (reservation.validity !== validity) {
+    throw new Error(`create ${validity} returned validity ${reservation.validity}`);
+  }
+  const expectedHours = validity === "48h" ? 48 : 14 * 24;
+  if (reservation.holdValidityHours !== expectedHours) {
+    throw new Error(`create ${validity} returned ${reservation.holdValidityHours} validity hours`);
+  }
+  const createdAt = Date.parse(reservation.holdCreatedAt);
+  const expiresAt = Date.parse(reservation.holdExpiresAt);
+  if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt)) {
+    throw new Error(`create ${validity} returned invalid hold dates`);
+  }
+  const durationMs = expiresAt - createdAt;
+  if (durationMs !== expectedHours * 60 * 60 * 1000) {
+    throw new Error(`create ${validity} returned duration ${durationMs}ms`);
+  }
+  if (reservation.offer?.id !== search.offerId || reservation.offer?.from !== search.from || reservation.offer?.to !== search.to) {
+    throw new Error(`create ${validity} returned the wrong held offer`);
+  }
+  if (reservation.documentType !== "Visa-ready reservation hold") {
+    throw new Error(`create ${validity} returned documentType ${reservation.documentType}`);
+  }
+  if (!reservation.documentNumber?.startsWith(`DA-HOLD-${reservation.pnr}`)) {
+    throw new Error(`create ${validity} returned document number ${reservation.documentNumber}`);
+  }
+  if (!reservation.pdfUrl?.endsWith(`/api/reservations/${reservation.pnr}/pdf`)) {
+    throw new Error(`create ${validity} returned pdfUrl ${reservation.pdfUrl}`);
+  }
+  if (!reservation.verificationUrl?.endsWith(`/api/reservations/${reservation.pnr}`)) {
+    throw new Error(`create ${validity} returned verificationUrl ${reservation.verificationUrl}`);
+  }
+}
+
 async function smokeValidity(validity, index) {
   const search = {
     from: index === 0 ? "JFK" : "SFO",
@@ -56,10 +102,11 @@ async function smokeValidity(validity, index) {
     passengers: index + 1,
     tripType: "one-way",
   };
+  const offerId = firstOfferId(search);
   const payload = {
     ...search,
     validity,
-    offerId: firstOfferId(search),
+    offerId,
     travelerName: `Smoke Traveler ${validity}`,
     travelerEmail: `smoke-${validity}@example.com`,
   };
@@ -75,9 +122,7 @@ async function smokeValidity(validity, index) {
   if (!created?.ok || typeof pnr !== "string") {
     throw new Error(`create ${validity} did not return a reservation PNR`);
   }
-  if (created.reservation.validity !== validity) {
-    throw new Error(`create ${validity} returned validity ${created.reservation.validity}`);
-  }
+  assertReservationContract(created.reservation, validity, { ...search, offerId });
 
   const retrieveResponse = await fetch(`${origin}/api/reservations/${pnr}`);
   await expectOk(retrieveResponse, `retrieve ${validity}`, 200);
@@ -85,14 +130,19 @@ async function smokeValidity(validity, index) {
   if (!retrieved?.ok || retrieved.reservation?.pnr !== pnr || retrieved.reservation?.validity !== validity) {
     throw new Error(`retrieve ${validity} returned the wrong reservation`);
   }
+  assertReservationContract(retrieved.reservation, validity, { ...search, offerId });
 
   const pdfResponse = await fetch(`${origin}/api/reservations/${pnr}/pdf`);
   await expectOk(pdfResponse, `pdf ${validity}`, 200);
   const contentType = pdfResponse.headers.get("content-type") ?? "";
+  const disposition = pdfResponse.headers.get("content-disposition") ?? "";
   const pdf = new Uint8Array(await pdfResponse.arrayBuffer());
   const header = new TextDecoder().decode(pdf.slice(0, 8));
   if (!contentType.includes("application/pdf") || !header.startsWith("%PDF-")) {
     throw new Error(`pdf ${validity} did not return a PDF`);
+  }
+  if (!disposition.includes(`DevAir-${pnr}.pdf`)) {
+    throw new Error(`pdf ${validity} returned content-disposition ${disposition}`);
   }
 
   console.log(`reservation smoke ${validity}: pnr=${pnr} pdfBytes=${pdf.byteLength}`);
