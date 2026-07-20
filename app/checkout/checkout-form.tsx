@@ -78,24 +78,66 @@ export function CheckoutForm() {
     }
 
     setPayStatus("loading");
-    // Gated mock / Stripe test path — no live keys (P3).
-    await new Promise((r) => setTimeout(r, 400));
-    const useMock =
-      process.env.NEXT_PUBLIC_STRIPE_MOCK === "1" ||
-      !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+    // Gated mock Stripe sandbox — create payment + fire webhook (no live keys).
+    try {
+      const params =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search)
+          : null;
+      const reservationPnr = params?.get("pnr")?.trim().toUpperCase() || undefined;
 
-    if (useMock) {
+      const createRes = await fetch("/api/stripe/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: total,
+          currency: "usd",
+          reservationPnr,
+          email,
+          firstName,
+          lastName,
+        }),
+      });
+      const createJson = (await createRes.json().catch(() => ({}))) as {
+        error?: string;
+        paymentIntent?: { id?: string };
+      };
+      if (!createRes.ok || !createJson.paymentIntent?.id) {
+        setPayStatus("error");
+        setPayMessage(createJson.error || "Payment create failed.");
+        return;
+      }
+
+      const webhookRes = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Stripe-Signature": "t=mock,v1=mock",
+        },
+        body: JSON.stringify({
+          type: "payment_intent.succeeded",
+          paymentIntentId: createJson.paymentIntent.id,
+          reservationPnr,
+        }),
+      });
+      const webhookJson = (await webhookRes.json().catch(() => ({}))) as {
+        error?: string;
+        ok?: boolean;
+      };
+      if (!webhookRes.ok || !webhookJson.ok) {
+        setPayStatus("error");
+        setPayMessage(webhookJson.error || "Payment webhook failed.");
+        return;
+      }
+
       setPayStatus("paid");
       setPayMessage(
-        `Paid (mock/test). ${firstName} ${lastName} · ${formatMoney(total)}`,
+        `Paid (Stripe mock/sandbox). ${firstName} ${lastName} · ${formatMoney(total)}`,
       );
-      return;
+    } catch {
+      setPayStatus("error");
+      setPayMessage("Payment request failed. Try again.");
     }
-
-    setPayStatus("paid");
-    setPayMessage(
-      `Paid (Stripe sandbox). ${firstName} ${lastName} · ${formatMoney(total)}`,
-    );
   }
 
   const inputClass =

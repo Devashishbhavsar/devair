@@ -330,6 +330,40 @@ export async function getReservationByPnr(pnr: string): Promise<Reservation | nu
   return reservation ? withCurrentStatus(reservation) : null;
 }
 
+export async function markReservationPaid(pnr: string): Promise<
+  | { ok: true; reservation: Reservation }
+  | { ok: false; error: string; status?: number }
+> {
+  const normalized = pnr.trim().toUpperCase();
+  if (!PNR_REGEX.test(normalized)) {
+    return { ok: false, error: "Invalid PNR.", status: 400 };
+  }
+
+  const store = await readStore();
+  const index = store.reservations.findIndex((candidate) => candidate.pnr === normalized);
+  if (index < 0) {
+    return { ok: false, error: "Reservation not found.", status: 404 };
+  }
+
+  const existing = withCurrentStatus(store.reservations[index]);
+  if (existing.status === "expired") {
+    return { ok: false, error: "Hold expired before payment.", status: 409 };
+  }
+  if (existing.status === "paid") {
+    return { ok: true, reservation: existing };
+  }
+
+  const paid: Reservation = withCurrentStatus({
+    ...existing,
+    status: "paid",
+    statusReason: statusReason("paid"),
+    ticketingStatus: "ticketed",
+  });
+  store.reservations[index] = paid;
+  await writeStore(store);
+  return { ok: true, reservation: paid };
+}
+
 function escapePdfText(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
