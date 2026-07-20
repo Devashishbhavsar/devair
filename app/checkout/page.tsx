@@ -1,16 +1,24 @@
-// app/checkout/page.tsx
-import React from 'react';
-import { Status, resendEmail, downloadInvoice, requestCancel, extendValidity } from '../services/omService';
 
-const CheckoutPage: React.FC = () => {
+import React from 'react';
+
+const CheckoutPage = () => {
   return (
     <div>
+      {/* Booking Status View */}
       <h1>Booking Status</h1>
-      <Status />
-      <button onClick={resendEmail}>Resend Email</button>
-      <button onClick={downloadInvoice}>Download Invoice</button>
-      <button onClick={requestCancel}>Request Cancel</button>
-      <button onClick={extendValidity}>Extend Validity</button>
+      <p>Status: Pending</p>
+
+      {/* Resend Email Button */}
+      <button onClick={() => { /* Logic to resend email */ }}>Resend Email</button>
+
+      {/* Download Invoice Button */}
+      <button onClick={() => { /* Logic to download invoice */ }}>Download Invoice</button>
+
+      {/* Cancel Request Button */}
+      <button onClick={() => { /* Logic to request cancel */ }}>Cancel Request</button>
+
+      {/* Extend Validity Button */}
+      <button onClick={() => { /* Logic to extend validity */ }}>Extend Validity</button>
     </div>
   );
 };
