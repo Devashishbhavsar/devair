@@ -189,16 +189,16 @@ export function SearchForm() {
   }
 
   function fieldClassName(field: FieldName): string {
-    return `h-11 rounded-md border px-3 text-base outline-none dark:bg-zinc-900 ${
+    return `field-input ${
       fieldErrors[field]
-        ? "border-red-500 focus:border-red-600 dark:border-red-500 dark:focus:border-red-400"
-        : "border-zinc-300 focus:border-zinc-950 dark:border-zinc-700 dark:focus:border-zinc-50"
+        ? "!border-danger focus:!border-danger"
+        : ""
     }`;
   }
 
   return (
-    <div className="flex w-full max-w-2xl flex-col gap-8">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <div className="flex w-full flex-col gap-8">
+      <form onSubmit={handleSubmit} className="card flex flex-col gap-4 px-6 py-6" noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2 text-left">
             <label htmlFor="from" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -327,7 +327,7 @@ export function SearchForm() {
         <button
           type="submit"
           disabled={status === "loading"}
-          className="h-11 rounded-full bg-foreground px-5 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
+          className="btn-primary"
         >
           {status === "loading" ? "Searching…" : "Search flights"}
         </button>
@@ -369,10 +369,10 @@ export function SearchForm() {
                       setHoldMessage(null);
                     }}
                     aria-pressed={isSelected}
-                    className={`flex w-full flex-col gap-2 rounded-md border px-4 py-3 text-left transition-colors ${
+                    className={`card flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors ${
                       isSelected
-                        ? "border-zinc-950 bg-zinc-100 dark:border-zinc-50 dark:bg-zinc-900"
-                        : "border-zinc-300 hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
+                        ? "!border-brand ring-2 ring-brand/30"
+                        : "hover:!border-brand/50"
                     }`}
                   >
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -397,7 +397,7 @@ export function SearchForm() {
           </ul>
 
           {selected && (
-            <div className="flex flex-col gap-4 rounded-md border border-zinc-300 p-4 dark:border-zinc-700">
+            <div className="card flex flex-col gap-4 px-5 py-5">
               <div className="flex flex-col gap-1">
                 <p role="status" className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   Selected {selected.airline} ({selected.flightNumber}) for{" "}
@@ -417,7 +417,7 @@ export function SearchForm() {
                     id="holdValidity"
                     value={holdValidity}
                     onChange={(event) => setHoldValidity(event.target.value as HoldValidity)}
-                    className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+                    className="field-input"
                   >
                     <option value="48h">48 hours</option>
                     <option value="14d">14 days</option>
@@ -432,7 +432,7 @@ export function SearchForm() {
                     type="text"
                     value={travelerName}
                     onChange={(event) => setTravelerName(event.target.value)}
-                    className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+                    className="field-input"
                   />
                 </div>
                 <div className="flex flex-col gap-2 sm:col-span-2">
@@ -444,7 +444,7 @@ export function SearchForm() {
                     type="email"
                     value={travelerEmail}
                     onChange={(event) => setTravelerEmail(event.target.value)}
-                    className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
+                    className="field-input"
                   />
                 </div>
               </div>
@@ -453,7 +453,7 @@ export function SearchForm() {
                 type="button"
                 onClick={handleCreateHold}
                 disabled={holdStatus === "loading"}
-                className="h-11 rounded-full bg-foreground px-5 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
+                className="btn-primary"
               >
                 {holdStatus === "loading" ? "Creating hold..." : "Create hold"}
               </button>

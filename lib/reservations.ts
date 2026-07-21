@@ -323,6 +323,15 @@ export async function createHoldReservation(raw: CreateReservationInput): Promis
   return { ok: true, reservation };
 }
 
+export async function listReservationsByEmail(email: string): Promise<Reservation[]> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return [];
+  const store = await readStore();
+  return store.reservations
+    .filter((reservation) => reservation.travelerEmail === normalized)
+    .map(withCurrentStatus);
+}
+
 export async function getReservationByPnr(pnr: string): Promise<Reservation | null> {
   const normalized = pnr.trim().toUpperCase();
   if (!PNR_REGEX.test(normalized)) return null;

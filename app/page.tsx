@@ -22,19 +22,39 @@ export default async function Home({
   const googleEnabled = isGoogleOAuthConfigured();
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-md flex-col items-center gap-8 px-6 py-24 text-center">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-black dark:text-zinc-50">
-            DevAir
-          </h1>
-          <p className="text-lg text-zinc-600 dark:text-zinc-400">
-            Sign in to manage your flight reservations.
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-6 py-12 lg:flex-row lg:items-center lg:gap-16 lg:py-20">
+      <div className="flex flex-1 flex-col gap-4">
+        <p className="text-sm font-semibold uppercase tracking-widest text-brand">
+          Visa-ready flight holds
+        </p>
+        <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+          Reserve a real flight itinerary — without buying the ticket.
+        </h1>
+        <p className="max-w-lg text-lg text-muted">
+          DevAir creates verifiable airline holds for visa applications. Search
+          one-way offers, hold a fare for 48 hours or 14 days, and download an
+          embassy-ready PDF.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <Link href="/search" className="btn-primary">
+            Search flights
+          </Link>
+          <Link href="/om" className="btn-secondary">
+            Manage a booking
+          </Link>
+        </div>
+      </div>
+
+      <div className="card flex w-full max-w-md flex-col gap-5 self-center px-6 py-8 lg:self-auto">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
+          <p className="mt-1 text-sm text-muted">
+            Manage your reservations and saved passengers.
           </p>
         </div>
 
         {error && ERROR_MESSAGES[error] && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">
             {ERROR_MESSAGES[error]}
           </p>
         )}
@@ -42,28 +62,18 @@ export default async function Home({
         <SignInForm />
 
         {googleEnabled && (
-          <div className="flex w-full max-w-sm flex-col gap-3">
-            <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-400">
-              <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-muted">
+              <span className="h-px flex-1 bg-border" />
               or
-              <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+              <span className="h-px flex-1 bg-border" />
             </div>
-            <a
-              href="/api/auth/google"
-              className="flex h-11 items-center justify-center rounded-full border border-zinc-300 px-5 font-medium text-zinc-900 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
-            >
+            <a href="/api/auth/google" className="btn-secondary">
               Continue with Google
             </a>
           </div>
         )}
-
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Looking for flights?{" "}
-          <Link href="/search" className="font-medium underline underline-offset-4">
-            Search one-way offers
-          </Link>
-        </p>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

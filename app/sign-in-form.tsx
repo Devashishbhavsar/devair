@@ -37,28 +37,26 @@ export function SignInForm() {
   }
 
   return (
-    <div className="flex w-full max-w-sm flex-col gap-4">
+    <div className="flex w-full flex-col gap-4">
       <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
-        <label htmlFor="email" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Email address
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="h-11 rounded-md border border-zinc-300 px-3 text-base outline-none focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-50"
-        />
-        <button
-          type="submit"
-          disabled={status === "submitting"}
-          className="h-11 rounded-full bg-foreground px-5 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
-        >
-          {status === "submitting" ? "Sending…" : "Sign in"}
+        <div>
+          <label htmlFor="email" className="field-label">
+            Email address
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className="field-input"
+          />
+        </div>
+        <button type="submit" disabled={status === "submitting"} className="btn-primary">
+          {status === "submitting" ? "Sending…" : "Sign in with magic link"}
         </button>
       </form>
 
@@ -66,9 +64,7 @@ export function SignInForm() {
         <p
           role="status"
           className={
-            status === "error"
-              ? "text-sm text-red-600 dark:text-red-400"
-              : "text-sm text-zinc-600 dark:text-zinc-400"
+            status === "error" ? "text-sm text-danger" : "text-sm text-muted"
           }
         >
           {message}

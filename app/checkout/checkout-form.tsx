@@ -1,10 +1,18 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type FieldName = "firstName" | "lastName" | "email" | "nationality";
 type FieldErrors = Partial<Record<FieldName, string>>;
 type PayStatus = "idle" | "loading" | "paid" | "error";
+
+type SavedPassenger = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  nationality: string | null;
+};
 
 const SUBTOTAL = 189;
 const TAX_RATE = 0.08;
@@ -47,9 +55,34 @@ export function CheckoutForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [payStatus, setPayStatus] = useState<PayStatus>("idle");
   const [payMessage, setPayMessage] = useState<string | null>(null);
+  const [savedPassengers, setSavedPassengers] = useState<SavedPassenger[]>([]);
 
   const tax = useMemo(() => Math.round(SUBTOTAL * TAX_RATE * 100) / 100, []);
   const total = useMemo(() => Math.round((SUBTOTAL + tax) * 100) / 100, [tax]);
+
+  // Saved-passenger prefill (signed-in users only; 401 just means no prefill).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/passengers")
+      .then((response) => (response.ok ? response.json() : { passengers: [] }))
+      .then((data: { passengers?: SavedPassenger[] }) => {
+        if (!cancelled) setSavedPassengers(data.passengers ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function prefillFromSaved(id: string) {
+    const passenger = savedPassengers.find((candidate) => candidate.id === id);
+    if (!passenger) return;
+    setFirstName(passenger.firstName);
+    setLastName(passenger.lastName);
+    if (passenger.email) setEmail(passenger.email);
+    if (passenger.nationality) setNationality(passenger.nationality);
+    setFieldErrors({});
+  }
 
   function handleCouponBlur() {
     const code = coupon.trim();
@@ -158,6 +191,27 @@ export function CheckoutForm() {
         >
           Passenger details
         </h2>
+        {savedPassengers.length > 0 && (
+          <div>
+            <label htmlFor="savedPassenger" className={labelClass}>
+              Use a saved passenger
+            </label>
+            <select
+              id="savedPassenger"
+              className={inputClass}
+              defaultValue=""
+              onChange={(e) => prefillFromSaved(e.target.value)}
+            >
+              <option value="">Enter details manually…</option>
+              {savedPassengers.map((passenger) => (
+                <option key={passenger.id} value={passenger.id}>
+                  {passenger.firstName} {passenger.lastName}
+                  {passenger.nationality ? ` (${passenger.nationality})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="firstName" className={labelClass}>
