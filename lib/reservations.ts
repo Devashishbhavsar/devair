@@ -31,6 +31,7 @@ export type Reservation = {
   verificationUrl: string | null;
   pdfUrl: string;
   offer: FlightOffer;
+  cancelRequestedAt?: string | null;
 };
 
 export type ReservationValidationError = {
@@ -362,6 +363,94 @@ export async function markReservationPaid(pnr: string): Promise<
   store.reservations[index] = paid;
   await writeStore(store);
   return { ok: true, reservation: paid };
+}
+
+export async function requestReservationCancellation(pnr: string): Promise<
+  | { ok: true; reservation: Reservation }
+  | { ok: false; error: string; status?: number }
+> {
+  const normalized = pnr.trim().toUpperCase();
+  if (!PNR_REGEX.test(normalized)) {
+    return { ok: false, error: "Invalid PNR.", status: 400 };
+  }
+  const store = await readStore();
+  const index = store.reservations.findIndex((candidate) => candidate.pnr === normalized);
+  if (index < 0) {
+    return { ok: false, error: "Reservation not found.", status: 404 };
+  }
+  const updated: Reservation = {
+    ...store.reservations[index],
+    cancelRequestedAt: store.reservations[index].cancelRequestedAt ?? new Date().toISOString(),
+  };
+  store.reservations[index] = updated;
+  await writeStore(store);
+  return { ok: true, reservation: withCurrentStatus(updated) };
+}
+
+export async function extendReservationValidity(
+  pnr: string,
+  validity?: unknown,
+): Promise<
+  | { ok: true; reservation: Reservation }
+  | { ok: false; error: string; status?: number }
+> {
+  const normalized = pnr.trim().toUpperCase();
+  if (!PNR_REGEX.test(normalized)) {
+    return { ok: false, error: "Invalid PNR.", status: 400 };
+  }
+  const store = await readStore();
+  const index = store.reservations.findIndex((candidate) => candidate.pnr === normalized);
+  if (index < 0) {
+    return { ok: false, error: "Reservation not found.", status: 404 };
+  }
+  const existing = withCurrentStatus(store.reservations[index]);
+  if (existing.status === "paid") {
+    return { ok: false, error: "Paid reservations do not need validity extension.", status: 409 };
+  }
+  const nextValidity = validity === undefined || validity === null || validity === ""
+    ? existing.validity
+    : validateHoldValidity(validity);
+  if (!nextValidity) {
+    return { ok: false, error: "Choose a hold validity of 48h or 14d.", status: 400 };
+  }
+  const now = new Date();
+  const extended: Reservation = withCurrentStatus({
+    ...existing,
+    status: "hold",
+    statusReason: statusReason("hold"),
+    validity: nextValidity,
+    validityLabel: validityLabel(nextValidity),
+    holdValidityHours: validityDurationHours(nextValidity),
+    holdExpiresAt: addValidity(now, nextValidity).toISOString(),
+  });
+  extended.verificationCode = verificationCode(extended);
+  store.reservations[index] = extended;
+  await writeStore(store);
+  return { ok: true, reservation: extended };
+}
+
+export async function expirePastDueHolds(at = new Date()): Promise<{
+  ok: true;
+  expired: Reservation[];
+  checked: number;
+}> {
+  const store = await readStore();
+  const expired: Reservation[] = [];
+  store.reservations = store.reservations.map((reservation) => {
+    if (reservation.status === "paid") return reservation;
+    if (reservation.status === "expired") return reservation;
+    if (new Date(reservation.holdExpiresAt) > at) return reservation;
+    const cancelled: Reservation = {
+      ...reservation,
+      status: "expired",
+      statusReason: statusReason("expired"),
+      ticketingStatus: "not_ticketed",
+    };
+    expired.push(withCurrentStatus(cancelled));
+    return cancelled;
+  });
+  await writeStore(store);
+  return { ok: true, expired, checked: store.reservations.length };
 }
 
 function escapePdfText(value: string): string {
