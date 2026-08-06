@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { isDemoBannerVisible } from "@/lib/demo-banner";
 import { readSessionEmail, SESSION_COOKIE_NAME } from "@/lib/session";
+import { SiteNav } from "./site-nav";
 
 export async function SiteHeader() {
   const cookieStore = await cookies();
@@ -16,20 +17,7 @@ export async function SiteHeader() {
           </span>
           DevAir
         </Link>
-        <nav className="flex items-center gap-1 text-sm">
-          <Link href="/search" className="rounded-md px-3 py-1.5 font-medium text-muted transition-colors hover:bg-surface-muted hover:text-foreground">
-            Search flights
-          </Link>
-          <Link href="/om" className="rounded-md px-3 py-1.5 font-medium text-muted transition-colors hover:bg-surface-muted hover:text-foreground">
-            Manage booking
-          </Link>
-          <Link
-            href={email ? "/account" : "/"}
-            className="ml-1 rounded-md border border-border px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-surface-muted"
-          >
-            {email ? "Account" : "Sign in"}
-          </Link>
-        </nav>
+        <SiteNav email={email} />
       </div>
     </header>
   );

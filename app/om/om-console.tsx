@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { AlertIcon, SearchIcon } from "../icons";
 
 type Reservation = {
   pnr: string;
@@ -30,6 +31,17 @@ const PNR_PATTERN = /^[A-Z2-9]{6}$/i;
 function formatUtc(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toUTCString();
+}
+
+function statusChipClass(status: Reservation["status"]): string {
+  switch (status) {
+    case "paid":
+      return "status-chip bg-success-soft text-success";
+    case "expired":
+      return "status-chip bg-danger-soft text-danger";
+    default:
+      return "status-chip bg-brand-soft text-brand";
+  }
 }
 
 export function OmConsole() {
@@ -119,25 +131,17 @@ export function OmConsole() {
     }
   }
 
-  const inputClass =
-    "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-left text-sm uppercase text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50";
-  const actionClass =
-    "rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900";
-
   return (
     <div className="flex w-full flex-col gap-6 text-left">
       <form onSubmit={handleLookup} className="flex flex-col gap-2" noValidate>
-        <label
-          htmlFor="pnr"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
+        <label htmlFor="pnr" className="field-label">
           Booking reference (PNR)
         </label>
         <div className="flex gap-2">
           <input
             id="pnr"
             name="pnr"
-            className={inputClass}
+            className="field-input font-mono uppercase tracking-wider"
             value={pnrInput}
             onChange={(e) => setPnrInput(e.target.value)}
             placeholder="e.g. AB3CD9"
@@ -147,76 +151,93 @@ export function OmConsole() {
           <button
             type="submit"
             disabled={lookupStatus.kind === "loading"}
-            className="shrink-0 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+            className="btn-primary shrink-0"
           >
             {lookupStatus.kind === "loading" ? "Looking up…" : "Look up"}
           </button>
         </div>
-        {lookupStatus.kind === "error" && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {lookupStatus.message}
-          </p>
-        )}
       </form>
 
+      {lookupStatus.kind === "error" && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-md border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger"
+        >
+          <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{lookupStatus.message}</p>
+        </div>
+      )}
+
       {!reservation && lookupStatus.kind !== "error" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Enter the PNR from your hold confirmation to manage the booking.
-        </p>
+        <div
+          role="status"
+          className="card flex flex-col items-center gap-2 px-6 py-10 text-center"
+        >
+          <SearchIcon className="h-8 w-8 text-muted" />
+          <p className="font-medium">Find your booking</p>
+          <p className="max-w-md text-sm text-muted">
+            Enter the 6-character PNR from your hold confirmation to check
+            status, resend the email, download your invoice, or manage the hold.
+          </p>
+        </div>
       )}
 
       {reservation && (
         <section
           aria-labelledby="booking-status-heading"
-          className="flex flex-col gap-4 rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+          className="card flex flex-col gap-4 p-5"
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <h2
               id="booking-status-heading"
-              className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+              className="text-lg font-semibold text-foreground"
             >
-              {reservation.pnr} · {reservation.offer.airline} {reservation.offer.flightNumber}
+              {reservation.pnr} · {reservation.offer.airline}{" "}
+              {reservation.offer.flightNumber}
             </h2>
-            <span className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
+            <span className={statusChipClass(reservation.status)}>
               {reservation.status}
             </span>
           </div>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Route</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-muted">Route</dt>
+              <dd className="font-medium text-foreground">
                 {reservation.offer.from} → {reservation.offer.to} · {reservation.offer.date}
               </dd>
             </div>
-            <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Hold valid until</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-muted">Hold valid until</dt>
+              <dd className="font-medium text-foreground">
                 {formatUtc(reservation.holdExpiresAt)} ({reservation.validityLabel})
               </dd>
             </div>
-            <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Traveler</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-muted">Traveler</dt>
+              <dd className="font-medium text-foreground">
                 {reservation.travelerName ?? "Not provided"} ·{" "}
                 {reservation.travelerEmail ?? "no email"}
               </dd>
             </div>
-            <div>
-              <dt className="text-zinc-500 dark:text-zinc-400">Status detail</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">{reservation.statusReason}</dd>
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-muted">Status detail</dt>
+              <dd className="font-medium text-foreground">{reservation.statusReason}</dd>
             </div>
           </dl>
           {reservation.cancelRequestedAt && (
-            <p className="text-sm text-amber-700 dark:text-amber-400">
-              Cancellation requested at {formatUtc(reservation.cancelRequestedAt)} — our team
-              will process it.
+            <p className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
+              <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Cancellation requested at {formatUtc(reservation.cancelRequestedAt)} — our team
+                will process it.
+              </span>
             </p>
           )}
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className={actionClass}
+              className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               disabled={busyAction !== null || !reservation.travelerEmail}
               onClick={() => runAction("resend_email", "Resend email")}
             >
@@ -224,7 +245,7 @@ export function OmConsole() {
             </button>
             <a
               href={`/api/reservations/${reservation.pnr}/pdf`}
-              className={actionClass}
+              className="btn-secondary"
               target="_blank"
               rel="noreferrer"
             >
@@ -232,7 +253,7 @@ export function OmConsole() {
             </a>
             <button
               type="button"
-              className={actionClass}
+              className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               disabled={busyAction !== null || Boolean(reservation.cancelRequestedAt)}
               onClick={() => runAction("request_cancel", "Request cancel")}
             >
@@ -240,7 +261,7 @@ export function OmConsole() {
             </button>
             <button
               type="button"
-              className={actionClass}
+              className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
               disabled={busyAction !== null || reservation.status === "paid"}
               onClick={() => runAction("extend_validity", "Extend validity")}
             >
@@ -248,7 +269,7 @@ export function OmConsole() {
             </button>
           </div>
           {!reservation.travelerEmail && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm text-muted">
               No traveler email on file — resend is disabled.
             </p>
           )}
@@ -257,11 +278,16 @@ export function OmConsole() {
               role="status"
               className={
                 actionStatus.kind === "error"
-                  ? "text-sm text-red-600 dark:text-red-400"
-                  : "text-sm text-emerald-700 dark:text-emerald-400"
+                  ? "flex items-start gap-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger"
+                  : "flex items-start gap-2 rounded-md bg-success-soft px-3 py-2 text-sm text-success"
               }
             >
-              {actionStatus.message}
+              {actionStatus.kind === "error" ? (
+                <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              ) : (
+                <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+              )}
+              <span>{actionStatus.message}</span>
             </p>
           )}
         </section>
