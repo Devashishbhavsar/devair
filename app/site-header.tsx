@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { isDemoBannerVisible } from "@/lib/demo-banner";
 import { readSessionEmail, SESSION_COOKIE_NAME } from "@/lib/session";
 
 export async function SiteHeader() {
@@ -35,11 +36,15 @@ export async function SiteHeader() {
 }
 
 export function SiteFooter() {
+  const showDemoBanner = isDemoBannerVisible();
+
   return (
     <footer className="border-t border-border py-6">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 px-6 text-sm text-muted sm:flex-row">
         <p>DevAir — flight reservation holds for visa applications.</p>
-        <p>Demo build · Stripe test mode · no real tickets issued.</p>
+        {showDemoBanner && (
+          <p>Demo build · Stripe test mode · no real tickets issued.</p>
+        )}
       </div>
     </footer>
   );

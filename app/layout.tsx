@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "DevAir",
-  description: "DevAir flight reservations — sign in to manage your bookings.",
+  description:
+    "DevAir — visa-ready flight reservation holds. Search one-way offers, hold a fare for 48 hours or 14 days, and download an embassy-ready PDF itinerary.",
 };
 
 export default function RootLayout({
