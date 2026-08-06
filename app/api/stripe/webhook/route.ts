@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   let reservationResult: Awaited<ReturnType<typeof markReservationPaid>> | null = null;
 
   if (pnr) {
-    reservationResult = await markReservationPaid(pnr);
+    reservationResult = await markReservationPaid(pnr, { amountCents: succeeded.amount });
     if (!reservationResult.ok) {
       return NextResponse.json(
         {

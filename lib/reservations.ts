@@ -32,7 +32,15 @@ export type Reservation = {
   pdfUrl: string;
   offer: FlightOffer;
   cancelRequestedAt?: string | null;
+  /** Amount actually paid (cents) captured from the (mock) Stripe intent. */
+  paidAmountCents?: number | null;
+  /** Refund workflow state, tracked per reservation (additive — status stays "paid"). */
+  refundStatus?: "none" | "requested" | "approved" | "denied";
+  refundRequestedAt?: string | null;
+  refundResolvedAt?: string | null;
 };
+
+export type ReservationRefundStatus = NonNullable<Reservation["refundStatus"]>;
 
 export type ReservationValidationError = {
   field?:
@@ -161,6 +169,10 @@ function withCurrentStatus(reservation: Reservation): Reservation {
     issuedAt: reservation.issuedAt ?? reservation.holdCreatedAt,
     documentType: reservation.documentType ?? "Visa-ready reservation hold",
     ticketingStatus: reservation.ticketingStatus ?? "not_ticketed",
+    paidAmountCents: reservation.paidAmountCents ?? null,
+    refundStatus: reservation.refundStatus ?? "none",
+    refundRequestedAt: reservation.refundRequestedAt ?? null,
+    refundResolvedAt: reservation.refundResolvedAt ?? null,
   };
 }
 
@@ -315,6 +327,10 @@ export async function createHoldReservation(raw: CreateReservationInput): Promis
     verificationUrl: publicUrls.verificationUrl,
     pdfUrl: publicUrls.pdfUrl,
     offer,
+    paidAmountCents: null,
+    refundStatus: "none",
+    refundRequestedAt: null,
+    refundResolvedAt: null,
   };
   reservation.verificationCode = verificationCode(reservation);
 
@@ -332,6 +348,12 @@ export async function listReservationsByEmail(email: string): Promise<Reservatio
     .map(withCurrentStatus);
 }
 
+/** Every reservation in the store (admin surfaces). */
+export async function listAllReservations(): Promise<Reservation[]> {
+  const store = await readStore();
+  return store.reservations.map(withCurrentStatus);
+}
+
 export async function getReservationByPnr(pnr: string): Promise<Reservation | null> {
   const normalized = pnr.trim().toUpperCase();
   if (!PNR_REGEX.test(normalized)) return null;
@@ -340,7 +362,10 @@ export async function getReservationByPnr(pnr: string): Promise<Reservation | nu
   return reservation ? withCurrentStatus(reservation) : null;
 }
 
-export async function markReservationPaid(pnr: string): Promise<
+export async function markReservationPaid(
+  pnr: string,
+  options?: { amountCents?: number },
+): Promise<
   | { ok: true; reservation: Reservation }
   | { ok: false; error: string; status?: number }
 > {
@@ -363,15 +388,61 @@ export async function markReservationPaid(pnr: string): Promise<
     return { ok: true, reservation: existing };
   }
 
+  const amountCents =
+    options?.amountCents !== undefined && Number.isFinite(options.amountCents) && options.amountCents > 0
+      ? Math.round(options.amountCents)
+      : existing.paidAmountCents;
+
   const paid: Reservation = withCurrentStatus({
     ...existing,
     status: "paid",
     statusReason: statusReason("paid"),
     ticketingStatus: "ticketed",
+    paidAmountCents: amountCents ?? null,
   });
   store.reservations[index] = paid;
   await writeStore(store);
   return { ok: true, reservation: paid };
+}
+
+export type ReservationRefundPatch = {
+  refundStatus: ReservationRefundStatus;
+  refundRequestedAt?: string | null;
+  refundResolvedAt?: string | null;
+};
+
+/**
+ * Update the additive refund state on a reservation. Refund bookkeeping lives
+ * in lib/customers.ts; this helper keeps the reservation store as the single
+ * source of truth for PNR → refund-status lookups on customer surfaces.
+ */
+export async function applyReservationRefundState(
+  pnr: string,
+  patch: ReservationRefundPatch,
+): Promise<
+  | { ok: true; reservation: Reservation }
+  | { ok: false; error: string; status: number }
+> {
+  const normalized = pnr.trim().toUpperCase();
+  if (!PNR_REGEX.test(normalized)) {
+    return { ok: false, error: "Invalid PNR.", status: 400 };
+  }
+  const store = await readStore();
+  const index = store.reservations.findIndex((candidate) => candidate.pnr === normalized);
+  if (index < 0) {
+    return { ok: false, error: "Reservation not found.", status: 404 };
+  }
+
+  const updated: Reservation = {
+    ...store.reservations[index],
+    refundStatus: patch.refundStatus,
+  };
+  if (patch.refundRequestedAt !== undefined) updated.refundRequestedAt = patch.refundRequestedAt;
+  if (patch.refundResolvedAt !== undefined) updated.refundResolvedAt = patch.refundResolvedAt;
+
+  store.reservations[index] = updated;
+  await writeStore(store);
+  return { ok: true, reservation: withCurrentStatus(updated) };
 }
 
 export async function requestReservationCancellation(pnr: string): Promise<

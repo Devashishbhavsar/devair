@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { readSessionEmail, SESSION_COOKIE_NAME } from "@/lib/session";
 import { listReservationsByEmail, type Reservation } from "@/lib/reservations";
 import { LogoutButton } from "./logout-button";
+import { RequestRefund } from "./request-refund";
 import { SavedPassengers } from "./saved-passengers";
 
 const STATUS_STYLES: Record<Reservation["status"], string> = {
@@ -16,6 +17,20 @@ const STATUS_LABELS: Record<Reservation["status"], string> = {
   hold: "Held",
   paid: "Paid",
   expired: "Expired",
+};
+
+const REFUND_STYLES: Record<NonNullable<Reservation["refundStatus"]>, string> = {
+  none: "",
+  requested: "bg-warning-soft text-warning",
+  approved: "bg-success-soft text-success",
+  denied: "bg-danger-soft text-danger",
+};
+
+const REFUND_LABELS: Record<NonNullable<Reservation["refundStatus"]>, string> = {
+  none: "",
+  requested: "Refund requested",
+  approved: "Refunded",
+  denied: "Refund denied",
 };
 
 function formatDate(iso: string): string {
@@ -81,6 +96,11 @@ export default async function AccountPage() {
                       <span className={`status-chip ${STATUS_STYLES[reservation.status]}`}>
                         {STATUS_LABELS[reservation.status]}
                       </span>
+                      {reservation.refundStatus !== "none" && (
+                        <span className={`status-chip ${REFUND_STYLES[reservation.refundStatus ?? "none"]}`}>
+                          {REFUND_LABELS[reservation.refundStatus ?? "none"]}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-muted">
                       {reservation.offer.airline} {reservation.offer.flightNumber} ·{" "}
@@ -108,6 +128,11 @@ export default async function AccountPage() {
                         Pay now
                       </Link>
                     )}
+                    {reservation.status === "paid" &&
+                      (reservation.refundStatus === "none" ||
+                        reservation.refundStatus === "denied") && (
+                        <RequestRefund pnr={reservation.pnr} />
+                      )}
                   </div>
                 </div>
               </li>
