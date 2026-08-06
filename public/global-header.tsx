@@ -1,4 +1,5 @@
 // Global Header component
+import React from 'react';
 class GlobalHeader extends React.Component {
   render() {
     return (
