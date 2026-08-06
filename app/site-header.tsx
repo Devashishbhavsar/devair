@@ -28,8 +28,16 @@ export function SiteFooter() {
 
   return (
     <footer className="border-t border-border py-6">
-      <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 px-6 text-sm text-muted sm:flex-row">
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 px-6 text-sm text-muted sm:flex-row sm:flex-wrap">
         <p>DevAir — flight reservation holds for visa applications.</p>
+        <nav className="flex items-center gap-4" aria-label="Footer">
+          <Link href="/search" className="transition-colors hover:text-foreground">
+            Search flights
+          </Link>
+          <Link href="/om" className="transition-colors hover:text-foreground">
+            Manage booking
+          </Link>
+        </nav>
         {showDemoBanner && (
           <p>Demo build · Stripe test mode · no real tickets issued.</p>
         )}

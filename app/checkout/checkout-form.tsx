@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AlertIcon, CheckIcon } from "../icons";
 
 type FieldName = "firstName" | "lastName" | "email" | "nationality";
 type FieldErrors = Partial<Record<FieldName, string>>;
@@ -12,6 +13,22 @@ type SavedPassenger = {
   lastName: string;
   email: string | null;
   nationality: string | null;
+};
+
+/**
+ * Minimal hold shape linking the order summary to the reservation being paid
+ * for. Structurally compatible with the server-side Reservation type from
+ * lib/reservations, so the checkout page can pass it straight through.
+ */
+type CheckoutHold = {
+  pnr: string;
+  offer: {
+    airline: string;
+    flightNumber: string;
+    from: string;
+    to: string;
+    date: string;
+  };
 };
 
 const SUBTOTAL = 189;
@@ -45,7 +62,11 @@ function validatePassenger(input: {
   return errors;
 }
 
-export function CheckoutForm() {
+export function CheckoutForm({
+  reservation,
+}: {
+  reservation?: CheckoutHold | null;
+}) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -113,11 +134,15 @@ export function CheckoutForm() {
     setPayStatus("loading");
     // Gated mock Stripe sandbox — create payment + fire webhook (no live keys).
     try {
-      const params =
-        typeof window !== "undefined"
+      const reservationPnr =
+        (typeof window !== "undefined"
           ? new URLSearchParams(window.location.search)
-          : null;
-      const reservationPnr = params?.get("pnr")?.trim().toUpperCase() || undefined;
+              .get("pnr")
+              ?.trim()
+              .toUpperCase()
+          : undefined) ||
+        reservation?.pnr ||
+        undefined;
 
       const createRes = await fetch("/api/stripe/payment", {
         method: "POST",
@@ -173,10 +198,9 @@ export function CheckoutForm() {
     }
   }
 
-  const inputClass =
-    "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-left text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50";
-  const labelClass =
-    "mb-1 block text-left text-sm font-medium text-zinc-700 dark:text-zinc-300";
+  function fieldClassName(hasError: boolean): string {
+    return `field-input ${hasError ? "!border-danger focus:!border-danger" : ""}`;
+  }
 
   return (
     <form
@@ -187,18 +211,18 @@ export function CheckoutForm() {
       <section className="flex flex-col gap-3" aria-labelledby="passenger-heading">
         <h2
           id="passenger-heading"
-          className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+          className="text-lg font-semibold text-foreground"
         >
           Passenger details
         </h2>
         {savedPassengers.length > 0 && (
           <div>
-            <label htmlFor="savedPassenger" className={labelClass}>
+            <label htmlFor="savedPassenger" className="field-label">
               Use a saved passenger
             </label>
             <select
               id="savedPassenger"
-              className={inputClass}
+              className="field-input"
               defaultValue=""
               onChange={(e) => prefillFromSaved(e.target.value)}
             >
@@ -214,45 +238,45 @@ export function CheckoutForm() {
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label htmlFor="firstName" className={labelClass}>
+            <label htmlFor="firstName" className="field-label">
               First name
             </label>
             <input
               id="firstName"
               name="firstName"
               autoComplete="given-name"
-              className={inputClass}
+              className={fieldClassName(Boolean(fieldErrors.firstName))}
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               aria-invalid={Boolean(fieldErrors.firstName)}
             />
             {fieldErrors.firstName && (
-              <p role="alert" className="mt-1 text-sm text-red-600">
+              <p role="alert" className="mt-1 text-sm text-danger">
                 {fieldErrors.firstName}
               </p>
             )}
           </div>
           <div>
-            <label htmlFor="lastName" className={labelClass}>
+            <label htmlFor="lastName" className="field-label">
               Last name
             </label>
             <input
               id="lastName"
               name="lastName"
               autoComplete="family-name"
-              className={inputClass}
+              className={fieldClassName(Boolean(fieldErrors.lastName))}
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               aria-invalid={Boolean(fieldErrors.lastName)}
             />
             {fieldErrors.lastName && (
-              <p role="alert" className="mt-1 text-sm text-red-600">
+              <p role="alert" className="mt-1 text-sm text-danger">
                 {fieldErrors.lastName}
               </p>
             )}
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="email" className={labelClass}>
+            <label htmlFor="email" className="field-label">
               Email
             </label>
             <input
@@ -260,33 +284,33 @@ export function CheckoutForm() {
               name="email"
               type="email"
               autoComplete="email"
-              className={inputClass}
+              className={fieldClassName(Boolean(fieldErrors.email))}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               aria-invalid={Boolean(fieldErrors.email)}
             />
             {fieldErrors.email && (
-              <p role="alert" className="mt-1 text-sm text-red-600">
+              <p role="alert" className="mt-1 text-sm text-danger">
                 {fieldErrors.email}
               </p>
             )}
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="nationality" className={labelClass}>
+            <label htmlFor="nationality" className="field-label">
               Nationality
             </label>
             <input
               id="nationality"
               name="nationality"
               autoComplete="country-name"
-              className={inputClass}
+              className={fieldClassName(Boolean(fieldErrors.nationality))}
               value={nationality}
               onChange={(e) => setNationality(e.target.value)}
               aria-invalid={Boolean(fieldErrors.nationality)}
               placeholder="e.g. US"
             />
             {fieldErrors.nationality && (
-              <p role="alert" className="mt-1 text-sm text-red-600">
+              <p role="alert" className="mt-1 text-sm text-danger">
                 {fieldErrors.nationality}
               </p>
             )}
@@ -297,30 +321,34 @@ export function CheckoutForm() {
       <section className="flex flex-col gap-3" aria-labelledby="summary-heading">
         <h2
           id="summary-heading"
-          className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+          className="text-lg font-semibold text-foreground"
         >
           Order summary
         </h2>
-        <dl className="rounded-md border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <dl className="rounded-md border border-border bg-surface-muted p-4 text-sm">
+          {reservation && (
+            <div className="flex justify-between gap-4 py-1">
+              <dt className="text-muted">Flight hold</dt>
+              <dd className="text-right font-medium text-foreground">
+                {reservation.offer.airline} {reservation.offer.flightNumber}
+                <span className="block text-muted">
+                  {reservation.offer.from} → {reservation.offer.to} ·{" "}
+                  {reservation.offer.date}
+                </span>
+              </dd>
+            </div>
+          )}
           <div className="flex justify-between gap-4 py-1">
-            <dt className="text-zinc-600 dark:text-zinc-400">Flight hold (subtotal)</dt>
-            <dd className="font-medium text-zinc-900 dark:text-zinc-50">
-              {formatMoney(SUBTOTAL)}
-            </dd>
+            <dt className="text-muted">Subtotal</dt>
+            <dd className="font-medium text-foreground">{formatMoney(SUBTOTAL)}</dd>
           </div>
           <div className="flex justify-between gap-4 py-1">
-            <dt className="text-zinc-600 dark:text-zinc-400">
-              Tax ({Math.round(TAX_RATE * 100)}%)
-            </dt>
-            <dd className="font-medium text-zinc-900 dark:text-zinc-50">
-              {formatMoney(tax)}
-            </dd>
+            <dt className="text-muted">Tax ({Math.round(TAX_RATE * 100)}%)</dt>
+            <dd className="font-medium text-foreground">{formatMoney(tax)}</dd>
           </div>
-          <div className="mt-2 flex justify-between gap-4 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-            <dt className="font-semibold text-zinc-900 dark:text-zinc-50">Total</dt>
-            <dd className="font-semibold text-zinc-900 dark:text-zinc-50">
-              {formatMoney(total)}
-            </dd>
+          <div className="mt-2 flex justify-between gap-4 border-t border-border pt-2">
+            <dt className="font-semibold text-foreground">Total</dt>
+            <dd className="font-semibold text-foreground">{formatMoney(total)}</dd>
           </div>
         </dl>
       </section>
@@ -328,32 +356,30 @@ export function CheckoutForm() {
       <section className="flex flex-col gap-2" aria-labelledby="coupon-heading">
         <h2
           id="coupon-heading"
-          className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+          className="text-lg font-semibold text-foreground"
         >
           Coupon
         </h2>
-        <label htmlFor="coupon" className={labelClass}>
+        <label htmlFor="coupon" className="field-label">
           Code (validated in W3)
         </label>
         <input
           id="coupon"
           name="coupon"
-          className={inputClass}
+          className="field-input"
           value={coupon}
           onChange={(e) => setCoupon(e.target.value)}
           onBlur={handleCouponBlur}
           placeholder="Optional"
         />
-        {couponNote && (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{couponNote}</p>
-        )}
+        {couponNote && <p className="text-sm text-muted">{couponNote}</p>}
       </section>
 
       <div className="flex flex-col gap-2">
         <button
           type="submit"
           disabled={payStatus === "loading" || payStatus === "paid"}
-          className="rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+          className="btn-primary"
         >
           {payStatus === "loading"
             ? "Processing…"
@@ -362,20 +388,26 @@ export function CheckoutForm() {
               : `Pay ${formatMoney(total)} (Stripe test / mock)`}
         </button>
         {payStatus === "idle" && !payMessage && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-muted">
             No live Stripe keys — sandbox/mock only (P3).
           </p>
         )}
-        {payMessage && (
+        {payStatus === "error" && payMessage && (
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger"
+          >
+            <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{payMessage}</span>
+          </p>
+        )}
+        {payStatus === "paid" && payMessage && (
           <p
             role="status"
-            className={
-              payStatus === "error"
-                ? "text-sm text-red-600 dark:text-red-400"
-                : "text-sm text-emerald-700 dark:text-emerald-400"
-            }
+            className="flex items-start gap-2 rounded-md bg-success-soft px-3 py-2 text-sm text-success"
           >
-            {payMessage}
+            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{payMessage}</span>
           </p>
         )}
       </div>
